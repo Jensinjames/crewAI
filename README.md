@@ -1,6 +1,6 @@
 # crewAI
 
-![Logo of crewAI, tow people rowing on a boat](./crewai_logo.png)
+![Logo of crewAI, tow people rowing on a boat](./docs/crewai_logo.png)
 
 🤖 Cutting-edge framework for orchestrating role-playing, autonomous AI agents. By fostering collaborative intelligence, CrewAI empowers agents to work together seamlessly, tackling complex tasks.
 
@@ -11,7 +11,7 @@
 - [Local Open Source Models](#local-open-source-models)
 - [CrewAI x AutoGen x ChatDev](#how-crewai-compares)
 - [Contribution](#contribution)
-- [💬 CrewAI Discord Community](https://discord.gg/4ZqbAStv)
+- [💬 CrewAI Discord Community](https://discord.com/invite/X4JWnZnxPb)
 - [Hire Consulting](#hire-consulting)
 - [License](#license)
 
@@ -20,7 +20,7 @@
 The power of AI collaboration has too much to offer.
 CrewAI is designed to enable AI agents to assume roles, share goals, and operate in a cohesive unit - much like a well-oiled crew. Whether you're building a smart assistant platform, an automated customer service ensemble, or a multi-agent research team, CrewAI provides the backbone for sophisticated multi-agent interactions.
 
-- 🤖 [Talk with the Docs](https://chat.openai.com/g/g-qqTuUWsBY-crewai-assistant)
+- 🤖 [Talk with the Docs](https://chatg.pt/DWjSBZn)
 - 📄 [Documentation Wiki](https://github.com/joaomdmoura/CrewAI/wiki)
 
 ## Getting Started
@@ -33,7 +33,7 @@ To get started with CrewAI, follow these simple steps:
 pip install crewai
 ```
 
-The example bellow also uses duckduckgo, so also install that
+The example below also uses duckduckgo, so also install that
 ```shell
 pip install duckduckgo-search
 ```
@@ -44,18 +44,14 @@ pip install duckduckgo-search
 import os
 from crewai import Agent, Task, Crew, Process
 
+os.environ["OPENAI_API_KEY"] = "YOUR KEY"
+
 # You can choose to use a local model through Ollama for example.
-# In this case we will use OpenHermes 2.5 as an example.
 #
 # from langchain.llms import Ollama
 # ollama_llm = Ollama(model="openhermes")
 
-# If you are using an ollama like above you don't need to set OPENAI_API_KEY.
-os.environ["OPENAI_API_KEY"] = "Your Key"
-
-# Define your tools, custom or not.
 # Install duckduckgo-search for this example:
-#
 # !pip install -U duckduckgo-search
 
 from langchain.tools import DuckDuckGoSearchRun
@@ -64,42 +60,47 @@ search_tool = DuckDuckGoSearchRun()
 # Define your agents with roles and goals
 researcher = Agent(
   role='Senior Research Analyst',
-  goal='Uncover cutting-edge developments in AI and data science in',
-  backstory="""You are a Senior Research Analyst at a leading tech think tank.
-  Your expertise lies in identifying emerging trends and technologies in AI and
-  data science. You have a knack for dissecting complex data and presenting
+  goal='Uncover cutting-edge developments in AI and data science',
+  backstory="""You work at a leading tech think tank.
+  Your expertise lies in identifying emerging trends.
+  You have a knack for dissecting complex data and presenting
   actionable insights.""",
   verbose=True,
   allow_delegation=False,
   tools=[search_tool]
-  # (optional) llm=ollama_llm, If you wanna use a local modal through Ollama, default is GPT4 with temperature=0.7
-
+  # You can pass an optional llm attribute specifying what mode you wanna use.
+  # It can be a local model through Ollama / LM Studio or a remote
+  # model like OpenAI, Mistral, Antrophic of others (https://python.langchain.com/docs/integrations/llms/)
+  #
+  # Examples:
+  # llm=ollama_llm # was defined above in the file
+  # llm=ChatOpenAI(model_name="gpt-3.5", temperature=0.7)
 )
 writer = Agent(
   role='Tech Content Strategist',
   goal='Craft compelling content on tech advancements',
-  backstory="""You are a renowned Tech Content Strategist, known for your insightful
-  and engaging articles on technology and innovation. With a deep understanding of
-  the tech industry, you transform complex concepts into compelling narratives.""",
+  backstory="""You are a renowned Content Strategist, known for
+  your insightful and engaging articles.
+  You transform complex concepts into compelling narratives.""",
   verbose=True,
-  # (optional) llm=ollama_llm, If you wanna use a local modal through Ollama, default is GPT4 with temperature=0.7
-  allow_delegation=True
+  allow_delegation=True,
+  # (optional) llm=ollama_llm
 )
 
 # Create tasks for your agents
 task1 = Task(
   description="""Conduct a comprehensive analysis of the latest advancements in AI in 2024.
   Identify key trends, breakthrough technologies, and potential industry impacts.
-  Compile your findings in a detailed report. Your final answer MUST be a full analysis report""",
+  Your final answer MUST be a full analysis report""",
   agent=researcher
 )
 
 task2 = Task(
-  description="""Using the insights from the researcher's report, develop an engaging blog
+  description="""Using the insights provided, develop an engaging blog
   post that highlights the most significant AI advancements.
   Your post should be informative yet accessible, catering to a tech-savvy audience.
-  Aim for a narrative that captures the essence of these breakthroughs and their
-  implications for the future. Your final answer MUST be the full blog post of at least 3 paragraphs.""",
+  Make it sound cool, avoid complex words so it doesn't sound like AI.
+  Your final answer MUST be the full blog post of at least 4 paragraphs.""",
   agent=writer
 )
 
@@ -107,8 +108,7 @@ task2 = Task(
 crew = Crew(
   agents=[researcher, writer],
   tasks=[task1, task2],
-  verbose=2, # Crew verbose more will let you know what tasks are being worked on, you can set it to 1 or 2 to different logging levels
-  process=Process.sequential # Sequential process will have tasks executed one after the other and the outcome of the previous one is passed as extra content into this next.
+  verbose=2, # You can set it to 1 or 2 to different logging levels
 )
 
 # Get your crew to work!
@@ -127,7 +127,7 @@ Currently the only supported process is `Process.sequential`, where one task is 
 - **Flexible Task Management**: Define tasks with customizable tools and assign them to agents dynamically.
 - **Processes Driven**: Currently only supports `sequential` task execution but more complex processes like consensual and hierarchical being worked on.
 
-![CrewAI Mind Map](/crewAI-mindmap.png "CrewAI Mind Map")
+![CrewAI Mind Map](./docs/crewAI-mindmap.png "CrewAI Mind Map")
 
 ## Examples
 You can test different real life examples of AI crews [in the examples repo](https://github.com/joaomdmoura/crewAI-examples?tab=readme-ov-file)
