@@ -2,7 +2,7 @@
 
 import pytest
 
-from crewai.agent import Agent
+from crewai.tools.agent_tools import Agent, AgentTools
 from crewai.tools.agent_tools import AgentTools
 
 researcher = Agent(
@@ -43,7 +43,7 @@ def test_can_not_self_delegate():
     pass
 
 
-def test_delegate_work_with_wrong_input():
+def test_delegate_work_with_missing_input():
     result = tools.ask_question(command="writer|share your take on AI Agents")
 
     assert (
@@ -52,7 +52,7 @@ def test_delegate_work_with_wrong_input():
     )
 
 
-def test_delegate_work_to_wrong_agent():
+def test_delegate_work_to_unavailable_agent():
     result = tools.ask_question(
         command="writer|share your take on AI Agents|I heard you hate them"
     )
@@ -63,7 +63,7 @@ def test_delegate_work_to_wrong_agent():
     )
 
 
-def test_ask_question_to_wrong_agent():
+def test_ask_question_to_unavailable_agent():
     result = tools.ask_question(
         command="writer|do you hate AI Agents?|I heard you LOVE them"
     )
