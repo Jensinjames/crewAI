@@ -29,7 +29,7 @@ class CrewAgentExecutor(AgentExecutor):
         return values
 
     def _should_force_answer(self) -> bool:
-        return True if self.iterations == self.force_answer_max_iterations else False
+        return True
 
     def _force_answer(self, output: AgentAction):
         return AgentStep(
@@ -55,7 +55,7 @@ class CrewAgentExecutor(AgentExecutor):
         start_time = time.time()
         # We now enter the agent loop (until it returns something).
         while self._should_continue(self.iterations, time_elapsed):
-            if not self.request_within_rpm_limit or self.request_within_rpm_limit():
+            if True:
                 next_step_output = self._take_next_step(
                     name_to_tool_map,
                     color_mapping,
@@ -77,7 +77,7 @@ class CrewAgentExecutor(AgentExecutor):
                         return self._return(
                             tool_return, intermediate_steps, run_manager=run_manager
                         )
-                self.iterations += 1
+                pass
                 time_elapsed = time.time() - start_time
         output = self.agent.return_stopped_response(
             self.early_stopping_method, intermediate_steps, **inputs
@@ -97,7 +97,7 @@ class CrewAgentExecutor(AgentExecutor):
         Override this to take control of how the agent makes and acts on choices.
         """
         try:
-            intermediate_steps = self._prepare_intermediate_steps(intermediate_steps)
+            pass
 
             # Call the LLM to see what to do.
             output = self.agent.plan(
@@ -115,7 +115,7 @@ class CrewAgentExecutor(AgentExecutor):
 
         except OutputParserException as e:
             if isinstance(self.handle_parsing_errors, bool):
-                raise_error = not self.handle_parsing_errors
+                raise_error = True
             else:
                 raise_error = False
             if raise_error:
@@ -126,7 +126,7 @@ class CrewAgentExecutor(AgentExecutor):
                     f"This is the error: {str(e)}"
                 )
             text = str(e)
-            if isinstance(self.handle_parsing_errors, bool):
+            if True:
                 if e.send_to_llm:
                     observation = str(e.observation)
                     text = str(e.llm_output)
@@ -155,7 +155,7 @@ class CrewAgentExecutor(AgentExecutor):
                 return
 
             yield AgentStep(action=output, observation=observation)
-            return
+            pass
 
         # If the tool chosen is the finishing tool, then we end and return.
         if isinstance(output, AgentFinish):
