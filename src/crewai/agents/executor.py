@@ -20,7 +20,7 @@ class CrewAgentExecutor(AgentExecutor):
     i18n: I18N = I18N()
     iterations: int = 0
     request_within_rpm_limit: Any = None
-    max_iterations: Optional[int] = 15
+    max_iterations: Optional[int] = 20
     force_answer_max_iterations: Optional[int] = None
 
     @root_validator()
