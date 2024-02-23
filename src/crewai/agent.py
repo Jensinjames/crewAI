@@ -1,10 +1,13 @@
+import os
 import uuid
-from typing import Any, List, Optional
+from typing import Any, List, Optional, Tuple
 
-from langchain.agents.format_scratchpad import format_log_to_str
+from crewai_tools import BaseTool as CrewAITool
+from langchain.agents.agent import RunnableAgent
+from langchain.agents.tools import tool as LangChainTool
 from langchain.memory import ConversationSummaryMemory
 from langchain.tools.render import render_text_description
-from langchain_core.runnables.config import RunnableConfig
+from langchain_core.agents import AgentAction
 from langchain_openai import ChatOpenAI
 from pydantic import (
     UUID4,
@@ -18,12 +21,7 @@ from pydantic import (
 )
 from pydantic_core import PydanticCustomError
 
-from crewai.agents import (
-    CacheHandler,
-    CrewAgentExecutor,
-    CrewAgentOutputParser,
-    ToolsHandler,
-)
+from crewai.agents import CacheHandler, CrewAgentExecutor, CrewAgentParser, ToolsHandler
 from crewai.utilities import I18N, Logger, Prompts, RPMController
 
 
@@ -39,15 +37,17 @@ class Agent(BaseModel):
             goal: The objective of the agent.
             backstory: The backstory of the agent.
             llm: The language model that will run the agent.
+            function_calling_llm: The language model that will the tool calling for this agent, it overrides the crew function_calling_llm.
             max_iter: Maximum number of iterations for an agent to execute a task.
             memory: Whether the agent should have memory or not.
             max_rpm: Maximum number of requests per minute for the agent execution to be respected.
             verbose: Whether the agent execution should be in verbose mode.
             allow_delegation: Whether the agent is allowed to delegate tasks to other agents.
             tools: Tools at agents disposal
+            step_callback: Callback to be executed after each step of the agent execution.
     """
 
-    __hash__ = object.__hash__
+    __hash__ = object.__hash__  # type: ignore
     _logger: Logger = PrivateAttr()
     _rpm_controller: RPMController = PrivateAttr(default=None)
     _request_within_rpm_limit: Any = PrivateAttr(default=None)
@@ -74,29 +74,34 @@ class Agent(BaseModel):
     allow_delegation: bool = Field(
         default=True, description="Allow delegation of tasks to agents"
     )
-    tools: List[Any] = Field(
+    tools: Optional[List[Any]] = Field(
         default_factory=list, description="Tools at agents disposal"
     )
     max_iter: Optional[int] = Field(
         default=15, description="Maximum iterations for an agent to execute a task"
     )
-    agent_executor: Optional[InstanceOf[CrewAgentExecutor]] = Field(
+    agent_executor: InstanceOf[CrewAgentExecutor] = Field(
         default=None, description="An instance of the CrewAgentExecutor class."
     )
-    tools_handler: Optional[InstanceOf[ToolsHandler]] = Field(
+    tools_handler: InstanceOf[ToolsHandler] = Field(
         default=None, description="An instance of the ToolsHandler class."
     )
-    cache_handler: Optional[InstanceOf[CacheHandler]] = Field(
+    cache_handler: InstanceOf[CacheHandler] = Field(
         default=CacheHandler(), description="An instance of the CacheHandler class."
     )
-    i18n: Optional[I18N] = Field(
-        default=I18N(), description="Internationalization settings."
+    step_callback: Optional[Any] = Field(
+        default=None,
+        description="Callback to be executed after each step of the agent execution.",
     )
-    llm: Optional[Any] = Field(
+    i18n: I18N = Field(default=I18N(), description="Internationalization settings.")
+    llm: Any = Field(
         default_factory=lambda: ChatOpenAI(
-            model_name="gpt-4",
+            model=os.environ.get("OPENAI_MODEL_NAME", "gpt-4")
         ),
         description="Language model that will run the agent.",
+    )
+    function_calling_llm: Optional[Any] = Field(
+        description="Language model that will run the agent.", default=None
     )
 
     @field_validator("id", mode="before")
@@ -126,7 +131,7 @@ class Agent(BaseModel):
 
     def execute_task(
         self,
-        task: str,
+        task: Any,
         context: Optional[str] = None,
         tools: Optional[List[Any]] = None,
     ) -> str:
@@ -140,21 +145,25 @@ class Agent(BaseModel):
         Returns:
             Output of the agent
         """
+        task_prompt = task.prompt()
+
         if context:
-            task = self.i18n.slice("task_with_context").format(
-                task=task, context=context
+            task_prompt = self.i18n.slice("task_with_context").format(
+                task=task_prompt, context=context
             )
 
-        tools = tools or self.tools
+        tools = self._parse_tools(tools or self.tools)
         self.agent_executor.tools = tools
+        self.agent_executor.task = task
+        self.agent_executor.tools_description = render_text_description(tools)
+        self.agent_executor.tools_names = self.__tools_names(tools)
 
         result = self.agent_executor.invoke(
             {
-                "input": task,
-                "tool_names": self.__tools_names(tools),
-                "tools": render_text_description(tools),
-            },
-            RunnableConfig(callbacks=[self.tools_handler]),
+                "input": task_prompt,
+                "tool_names": self.agent_executor.tools_names,
+                "tools": self.agent_executor.tools_description,
+            }
         )["output"]
 
         if self.max_rpm:
@@ -170,7 +179,7 @@ class Agent(BaseModel):
         """
         self.cache_handler = cache_handler
         self.tools_handler = ToolsHandler(cache=self.cache_handler)
-        self.__create_agent_executor()
+        self.create_agent_executor()
 
     def set_rpm_controller(self, rpm_controller: RPMController) -> None:
         """Set the rpm controller for the agent.
@@ -180,9 +189,9 @@ class Agent(BaseModel):
         """
         if not self._rpm_controller:
             self._rpm_controller = rpm_controller
-            self.__create_agent_executor()
+            self.create_agent_executor()
 
-    def __create_agent_executor(self) -> None:
+    def create_agent_executor(self) -> None:
         """Create an agent executor for the agent.
 
         Returns:
@@ -192,14 +201,21 @@ class Agent(BaseModel):
             "input": lambda x: x["input"],
             "tools": lambda x: x["tools"],
             "tool_names": lambda x: x["tool_names"],
-            "agent_scratchpad": lambda x: format_log_to_str(x["intermediate_steps"]),
+            "agent_scratchpad": lambda x: self.format_log_to_str(
+                x["intermediate_steps"]
+            ),
         }
+
         executor_args = {
+            "llm": self.llm,
             "i18n": self.i18n,
-            "tools": self.tools,
+            "tools": self._parse_tools(self.tools),
             "verbose": self.verbose,
             "handle_parsing_errors": True,
             "max_iterations": self.max_iter,
+            "step_callback": self.step_callback,
+            "tools_handler": self.tools_handler,
+            "function_calling_llm": self.function_calling_llm,
         }
 
         if self._rpm_controller:
@@ -213,9 +229,11 @@ class Agent(BaseModel):
             )
             executor_args["memory"] = summary_memory
             agent_args["chat_history"] = lambda x: x["chat_history"]
-            prompt = Prompts(i18n=self.i18n).task_execution_with_memory()
+            prompt = Prompts(
+                i18n=self.i18n, tools=self.tools
+            ).task_execution_with_memory()
         else:
-            prompt = Prompts(i18n=self.i18n).task_execution()
+            prompt = Prompts(i18n=self.i18n, tools=self.tools).task_execution()
 
         execution_prompt = prompt.partial(
             goal=self.goal,
@@ -224,17 +242,33 @@ class Agent(BaseModel):
         )
 
         bind = self.llm.bind(stop=[self.i18n.slice("observation")])
-        inner_agent = (
-            agent_args
-            | execution_prompt
-            | bind
-            | CrewAgentOutputParser(
-                tools_handler=self.tools_handler,
-                cache=self.cache_handler,
-                i18n=self.i18n,
-            )
+        inner_agent = agent_args | execution_prompt | bind | CrewAgentParser()
+        self.agent_executor = CrewAgentExecutor(
+            agent=RunnableAgent(runnable=inner_agent), **executor_args
         )
-        self.agent_executor = CrewAgentExecutor(agent=inner_agent, **executor_args)
+
+    def _parse_tools(self, tools: List[Any]) -> List[LangChainTool]:
+        """Parse tools to be used for the task."""
+        tools_list = []
+        for tool in tools:
+            if isinstance(tool, CrewAITool):
+                tools_list.append(tool.to_langchain())
+            else:
+                tools_list.append(tool)
+        return tools_list
+
+    def format_log_to_str(
+        self,
+        intermediate_steps: List[Tuple[AgentAction, str]],
+        observation_prefix: str = "Result: ",
+        llm_prefix: str = "",
+    ) -> str:
+        """Construct the scratchpad that lets the agent continue its thought process."""
+        thoughts = ""
+        for action, observation in intermediate_steps:
+            thoughts += action.log
+            thoughts += f"\n{observation_prefix}{observation}\n{llm_prefix}"
+        return thoughts
 
     @staticmethod
     def __tools_names(tools) -> str:
