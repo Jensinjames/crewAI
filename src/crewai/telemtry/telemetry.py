@@ -46,7 +46,7 @@ class Telemetry:
             )
             self.provider = TracerProvider(resource=self.resource)
             processor = BatchSpanProcessor(
-                OTLPSpanExporter(endpoint=f"{telemetry_endpoint}/v1/traces", timeout=60)
+                OTLPSpanExporter(endpoint=f"{telemetry_endpoint}/v1/traces", timeout=15)
             )
             self.provider.add_span_processor(processor)
             self.ready = True
@@ -58,7 +58,7 @@ class Telemetry:
             try:
                 trace.set_tracer_provider(self.provider)
             except Exception:
-                self.ready = False
+                pass
 
     def crew_creation(self, crew):
         """Records the creation of a crew."""
@@ -237,7 +237,7 @@ class Telemetry:
                             {
                                 "id": str(task.id),
                                 "description": task.description,
-                                "output": task.output.result,
+                                "output": task.output.raw_output,
                             }
                             for task in crew.tasks
                         ]
